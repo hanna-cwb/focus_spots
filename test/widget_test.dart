@@ -1,30 +1,42 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:focus_spots/main.dart';
+import 'package:focus_spots/screens/shell_screen.dart';
+import 'package:focus_spots/state/app_state.dart';
+import 'package:focus_spots/theme/app_theme.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const SensorTestApp());
+  testWidgets('shows onboarding when location is not granted', (tester) async {
+    await tester.pumpWidget(const FocusSpotsApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Allow'), findsOneWidget);
+    expect(find.text('01 / YOUR PLACES'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('tabs switch between Home, Spots, Friends and Stats', (tester) async {
+    tester.view.physicalSize = const Size(393 * 3, 852 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.pumpWidget(AppScope(
+      state: AppState(),
+      child: MaterialApp(theme: buildAppTheme(), home: const ShellScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Good to see you.'), findsOneWidget);
+
+    await tester.tap(find.text('Spots'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved spots'), findsOneWidget);
+
+    await tester.tap(find.text('Friends'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your study circle'), findsOneWidget);
+
+    await tester.tap(find.text('Stats'));
+    await tester.pumpAndSettle();
+    expect(find.text('Every minute counts.'), findsOneWidget);
   });
 }
