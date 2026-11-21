@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "502518181372",
+    "project_id": "focus-spots",
+    "storage_bucket": "focus-spots.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:502518181372:android:bf64e1443a595aadb9d679",
+        "android_client_info": {
+          "package_name": "com.example.focus_spots"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-yHUOgAmnFA7OzRXk9ztfMe1GWNjI6Vc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
