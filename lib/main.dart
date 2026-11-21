@@ -1,11 +1,29 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
-void main() => runApp(const SensorTestApp());
+import 'firebase_options.dart';
+
+/// Set if Firebase.initializeApp fails, so the app still starts and shows the error.
+Object? firebaseInitError;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    firebaseInitError = e;
+  }
+  runApp(const SensorTestApp());
+}
 
 class SensorTestApp extends StatelessWidget {
   const SensorTestApp({super.key});
@@ -454,6 +472,7 @@ class _SensorTestPageState extends State<SensorTestPage> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
+          const FirebaseCard(),
           GpsCard(gps: gps, onChanged: () => setState(() {})),
           PickupCard(detector: pickup, onChanged: () => setState(() {})),
           const SizedBox(height: 8),
@@ -607,6 +626,133 @@ class SensorCard extends StatelessWidget {
                   style: theme.textTheme.bodySmall,
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Writes a document to Firestore and reads it back directly from the server
+/// (bypassing the local cache) to verify the real connection.
+class FirebaseCard extends StatefulWidget {
+  const FirebaseCard({super.key});
+
+  @override
+  State<FirebaseCard> createState() => _FirebaseCardState();
+}
+
+class _FirebaseCardState extends State<FirebaseCard> {
+  static const _timeout = Duration(seconds: 10);
+
+  SensorStatus _status = SensorStatus.waiting;
+  String? _message;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _test();
+  }
+
+  String _hint(String code) => switch (code) {
+        'permission-denied' =>
+          '\n→ Security Rules in der Firebase Console prüfen '
+              '(Test-Modus oder Anmeldung nötig).',
+        'not-found' =>
+          '\n→ Firestore-Datenbank in der Firebase Console noch nicht angelegt?',
+        'unavailable' => '\n→ Keine Internetverbindung?',
+        _ => '',
+      };
+
+  Future<void> _test() async {
+    if (firebaseInitError != null) {
+      setState(() {
+        _status = SensorStatus.error;
+        _message = 'Firebase.initializeApp fehlgeschlagen: $firebaseInitError';
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _status = SensorStatus.waiting;
+      _message = null;
+    });
+
+    final sw = Stopwatch()..start();
+    try {
+      final doc =
+          FirebaseFirestore.instance.collection('_connection_test').doc('ping');
+      // set() only completes once the server has confirmed the write.
+      await doc.set({
+        'at': FieldValue.serverTimestamp(),
+        'platform': defaultTargetPlatform.name,
+      }).timeout(_timeout);
+      final snap = await doc
+          .get(const GetOptions(source: Source.server))
+          .timeout(_timeout);
+      sw.stop();
+      final at = (snap.data()?['at'] as Timestamp?)?.toDate();
+      _status = SensorStatus.ok;
+      _message = 'Schreiben + Lesen OK (${sw.elapsedMilliseconds} ms)\n'
+          'Server-Zeit: $at';
+    } on FirebaseException catch (e) {
+      _status = SensorStatus.error;
+      _message = '${e.code}: ${e.message}${_hint(e.code)}';
+    } on TimeoutException {
+      _status = SensorStatus.noData;
+      _message = 'Keine Antwort vom Server nach ${_timeout.inSeconds}s '
+          '(offline? Datenbank angelegt?)';
+    } catch (e) {
+      _status = SensorStatus.error;
+      _message = e.toString();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final app = firebaseInitError == null ? Firebase.app() : null;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CardHeader(
+              icon: Icons.cloud,
+              title: 'Firebase / Firestore',
+              trailing: StatusChip(_status),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Projekt: ${app?.options.projectId ?? '–'}',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (_message != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _message!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _status == SensorStatus.ok ? null : Colors.red,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              icon: _busy
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync),
+              label: const Text('Verbindung testen'),
+              onPressed: _busy ? null : _test,
+            ),
           ],
         ),
       ),
